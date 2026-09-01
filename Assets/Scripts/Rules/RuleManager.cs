@@ -1,3 +1,4 @@
+using RuralGames.Board;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -50,7 +51,15 @@ namespace RuralGames.Rules
         private void RegisterDefaultRules()
         {
             RegisterRule(new BaseExitRule());
-            Debug.Log("[RuleManager] BaseExitRule registered.");
+
+            // Add BoardManager reference for SafeZoneRule
+            var board = FindAnyObjectByType<BoardManager>();
+            if (board != null)
+                RegisterRule(new SafeZoneRule(board));
+
+            RegisterRule(new CaptureRule());
+
+            Debug.Log($"[RuleManager] Registered {_rules.Count} rules.");
         }
     }
 }
