@@ -1,46 +1,122 @@
-using UnityEngine;
-using RuralGames.Board;
 using RuralGames.Rules;
+using System.Collections.Generic;
+using UnityEngine;
 
-namespace RuralGames.Tests
+namespace RuralGames.Board
 {
-    public class BoardTest : MonoBehaviour
+    public class BoardManager : MonoBehaviour
     {
-        private BoardManager _board;
+        [Header("Path Configuration")]
+        [SerializeField] private int mainPathLength = 52;
+        [SerializeField] private int homePathLength = 6;
 
-        private void Start()
+        private readonly List<Vector2> _mainPath = new();
+        private readonly List<Vector2>[] _homePaths = new List<Vector2>[4];
+        private readonly HashSet<int> _safeZones = new() { 0, 8, 13, 21, 26, 34, 39, 47 };
+
+        private void Awake()
         {
-            _board = gameObject.AddComponent<BoardManager>();
-
-            Debug.Log("=== BoardManager Tests ===\n");
-
-            TestSafeZones();
-            TestTargetCalculation();
+            GenerateMainPath();
+            GenerateHomePaths();
         }
 
-        private void TestSafeZones()
+        public Vector2 GetPosition(int playerId, int boardIndex, TokenState state)
         {
-            Debug.Log("Safe Zone Tests:");
-            Debug.Log($"Index 0 is safe: {_board.IsSafeZone(0)} (expected: True)");
-            Debug.Log($"Index 5 is safe: {_board.IsSafeZone(5)} (expected: False)");
-            Debug.Log($"Index 8 is safe: {_board.IsSafeZone(8)} (expected: True)");
+            return state switch
+            {
+                TokenState.InBase => GetBasePosition(playerId),
+                TokenState.OnBoard => _mainPath[boardIndex],
+                TokenState.InHomePath => _homePaths[playerId][boardIndex - mainPathLength],
+                TokenState.ReachedHome => _homePaths[playerId][homePathLength - 1],
+                _ => Vector2.zero
+            };
         }
 
-        private void TestTargetCalculation()
+        public bool IsSafeZone(int mainPathIndex)
         {
-            Debug.Log("\nTarget Calculation Tests:");
+            return _safeZones.Contains(mainPathIndex);
+        }
 
-            // Player 0 on board at index 50, rolls 3 → should enter home path
-            int target = _board.CalculateTargetIndex(0, 50, 3, TokenState.OnBoard);
-            Debug.Log($"P0 at 50 + 3 = {target} (expected: 52, home path index 0)");
+        public int CalculateTargetIndex(int playerId, int currentIndex, int diceValue, TokenState state)
+        {
+            // NEW: Handle leaving Base
+            if (state == TokenState.InBase)
+            {
+                return 0; // Enter main path at start
+            }
 
-            // Player 0 on board at index 50, rolls 5 → overshoots
-            target = _board.CalculateTargetIndex(0, 50, 5, TokenState.OnBoard);
-            Debug.Log($"P0 at 50 + 5 = {target} (expected: -1, overshoot)");
+            if (state == TokenState.OnBoard)
+            {
+                int target = currentIndex + diceValue;
+                int homeEntryIndex = GetHomeEntryIndex(playerId);
 
-            // Player 0 in home path at index 52, rolls 3
-            target = _board.CalculateTargetIndex(0, 52, 3, TokenState.InHomePath);
-            Debug.Log($"P0 home 52 + 3 = {target} (expected: 55)");
+                if (target > homeEntryIndex)
+                {
+                    int homeSteps = target - homeEntryIndex;
+                    if (homeSteps <= homePathLength)
+                        return mainPathLength + homeSteps - 1;
+                    return -1; // Overshot home
+                }
+                return target;
+            }
+
+            if (state == TokenState.InHomePath)
+            {
+                int homeIndex = currentIndex - mainPathLength;
+                int targetHomeIndex = homeIndex + diceValue;
+                if (targetHomeIndex < homePathLength)
+                    return mainPathLength + targetHomeIndex;
+                return -1; // Overshot home
+            }
+
+            return -1;
+        }
+
+        private void GenerateMainPath()
+        {
+            float radius = 5f;
+            for (int i = 0; i < mainPathLength; i++)
+            {
+                float angle = (i / (float)mainPathLength) * Mathf.PI * 2;
+                _mainPath.Add(new Vector2(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius));
+            }
+        }
+
+        private void GenerateHomePaths()
+        {
+            for (int p = 0; p < 4; p++)
+            {
+                _homePaths[p] = new List<Vector2>();
+                Vector2 start = _mainPath[GetHomeEntryIndex(p)];
+                Vector2 direction = GetHomeDirection(p);
+
+                for (int i = 0; i < homePathLength; i++)
+                    _homePaths[p].Add(start + direction * (i + 1));
+            }
+        }
+
+        private Vector2 GetBasePosition(int playerId)
+        {
+            float angle = (playerId / 4f) * Mathf.PI * 2;
+            return new Vector2(Mathf.Cos(angle) * 8f, Mathf.Sin(angle) * 8f);
+        }
+
+        private int GetHomeEntryIndex(int playerId)
+        {
+            return playerId switch
+            {
+                0 => 51,
+                1 => 12,
+                2 => 25,
+                3 => 38,
+                _ => 51
+            };
+        }
+
+        private Vector2 GetHomeDirection(int playerId)
+        {
+            float angle = (playerId / 4f) * Mathf.PI * 2 + Mathf.PI;
+            return new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
         }
     }
 }
