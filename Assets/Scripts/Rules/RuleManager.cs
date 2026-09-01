@@ -52,14 +52,11 @@ namespace RuralGames.Rules
         {
             RegisterRule(new BaseExitRule());
 
-            // Add BoardManager reference for SafeZoneRule
-            var board = FindAnyObjectByType<BoardManager>();
+            var board = UnityEngine.Object.FindAnyObjectByType<BoardManager>();
             if (board != null)
                 RegisterRule(new SafeZoneRule(board));
 
-            RegisterRule(new CaptureRule());
-
-            Debug.Log($"[RuleManager] Registered {_rules.Count} rules.");
+            Debug.Log("[RuleManager] BaseExitRule registered.");
         }
     }
 }

@@ -12,7 +12,8 @@ namespace RuralGames.Core
         Rolling,
         SelectingToken,
         Moving,
-        EndTurn
+        EndTurn,
+        GameOver
     }
 
     public class GameManager : MonoBehaviour
@@ -23,18 +24,21 @@ namespace RuralGames.Core
 
         [Header("References")]
         [SerializeField] private DiceRoller diceRoller;
-        [SerializeField] private List<TokenController> playerTokens;
+        [SerializeField] private List<TokenController> allTokens;
 
         [Header("State")]
         [SerializeField] private GamePhase currentPhase = GamePhase.Idle;
         [SerializeField] private int lastDiceRoll = 0;
 
         private List<TokenController> _validTokens = new();
+        private WinChecker _winChecker;
 
         private void Start()
         {
             if (diceRoller == null)
-                diceRoller = FindAnyObjectByType<DiceRoller>();
+                diceRoller = UnityEngine.Object.FindAnyObjectByType<DiceRoller>();
+
+            _winChecker = UnityEngine.Object.FindAnyObjectByType<WinChecker>();
 
             diceRoller.OnDiceRolled += HandleDiceResult;
 
@@ -44,6 +48,10 @@ namespace RuralGames.Core
 
         private void Update()
         {
+            // Stop everything if game is over
+            if (currentPhase == GamePhase.GameOver)
+                return;
+
             // Roll dice
             if (currentPhase == GamePhase.Idle && Input.GetKeyDown(KeyCode.Space))
             {
@@ -70,7 +78,8 @@ namespace RuralGames.Core
             lastDiceRoll = roll;
 
             // Find which tokens can legally move
-            _validTokens = playerTokens.Where(t => t.CanMove(roll)).ToList();
+            var currentPlayerTokens = allTokens.Where(t => t.PlayerId == currentPlayerId).ToList();
+            _validTokens = currentPlayerTokens.Where(t => t.CanMove(roll)).ToList();
 
             if (_validTokens.Count == 0)
             {
@@ -84,7 +93,7 @@ namespace RuralGames.Core
             Debug.Log($"[GameManager] Player {currentPlayerId} rolled {roll}. Select a token to move:");
             for (int i = 0; i < _validTokens.Count; i++)
             {
-                int tokenNum = playerTokens.IndexOf(_validTokens[i]);
+                int tokenNum = allTokens.IndexOf(_validTokens[i]);
                 Debug.Log($"  Press {i + 1} for Token_{tokenNum}");
             }
         }
@@ -105,6 +114,16 @@ namespace RuralGames.Core
         private void EndTurn()
         {
             currentPhase = GamePhase.EndTurn;
+
+            // Check win condition BEFORE switching player
+            var currentPlayerTokens = allTokens.Where(t => t.PlayerId == currentPlayerId).ToList();
+            if (_winChecker != null && _winChecker.HasPlayerWon(currentPlayerId, currentPlayerTokens))
+            {
+                Debug.Log($"<color=green>=== PLAYER {currentPlayerId} WINS ===</color>");
+                currentPhase = GamePhase.GameOver;
+                return;
+            }
+
             _validTokens.Clear();
 
             currentPlayerId = (currentPlayerId + 1) % totalPlayers;

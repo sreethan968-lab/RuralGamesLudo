@@ -8,11 +8,16 @@ namespace RuralGames.Token
     {
         [Header("Player Setup")]
         [SerializeField] private int playerId = 0;
+        public int PlayerId => playerId;
+
         [SerializeField] private Color playerColor = Color.red;
 
         [Header("State")]
         [SerializeField] private TokenState currentState = TokenState.InBase;
+        public TokenState CurrentState => currentState;
+
         [SerializeField] private int currentBoardIndex = -1;
+        public int CurrentBoardIndex => currentBoardIndex;
 
         [Header("Movement")]
         [SerializeField] private float moveSpeed = 5f;
@@ -24,8 +29,11 @@ namespace RuralGames.Token
 
         private void Awake()
         {
-            _board = Object.FindAnyObjectByType<BoardManager>();
-            _rules = Object.FindAnyObjectByType<RuleManager>();
+            _board = UnityEngine.Object.FindAnyObjectByType<BoardManager>();
+            _rules = UnityEngine.Object.FindAnyObjectByType<RuleManager>();
+
+            if (_board == null) Debug.LogError("[Token] BoardManager not found!");
+            if (_rules == null) Debug.LogError("[Token] RuleManager not found!");
 
             SpriteRenderer sr = GetComponent<SpriteRenderer>();
             if (sr == null)
@@ -34,6 +42,8 @@ namespace RuralGames.Token
                 sr.sprite = CreateCircleSprite();
             }
             sr.color = playerColor;
+
+            Debug.Log($"[Token] Awake complete. Position: {transform.position}");
         }
 
         private void Update()
@@ -45,14 +55,11 @@ namespace RuralGames.Token
                 {
                     transform.position = _targetPosition;
                     _isMoving = false;
-                    Debug.Log($"[Token] Player {playerId} arrived at index {currentBoardIndex}");
+                    Debug.Log($"[Token] Arrived at position: {transform.position}, Index: {currentBoardIndex}");
                 }
             }
         }
 
-        /// <summary>
-        /// Checks if this token CAN move, without actually moving it.
-        /// </summary>
         public bool CanMove(int diceValue)
         {
             if (_board == null || _rules == null) return false;
@@ -64,9 +71,6 @@ namespace RuralGames.Token
             return _rules.IsMoveValid(context);
         }
 
-        /// <summary>
-        /// Validates AND executes the move.
-        /// </summary>
         public bool TryMove(int diceValue)
         {
             if (!CanMove(diceValue)) return false;
@@ -98,7 +102,20 @@ namespace RuralGames.Token
             _targetPosition.z = 0;
             _isMoving = true;
 
-            Debug.Log($"[Token] Player {playerId} moving to index {currentBoardIndex}");
+            Debug.Log($"[Token] Moving to index {currentBoardIndex}, target pos: {_targetPosition}");
+
+            // Check for capture
+            var allTokens = UnityEngine.Object.FindObjectsByType<TokenController>();
+            foreach (var other in allTokens)
+            {
+                if (other.PlayerId != this.playerId
+                    && other.CurrentState == TokenState.OnBoard
+                    && other.CurrentBoardIndex == this.currentBoardIndex)
+                {
+                    other.SetState(TokenState.InBase, -1);
+                    Debug.Log($"<color=red>[CAPTURE] Player {playerId} captured Player {other.PlayerId}'s token at index {currentBoardIndex}!</color>");
+                }
+            }
         }
 
         public void SetState(TokenState state, int boardIndex)

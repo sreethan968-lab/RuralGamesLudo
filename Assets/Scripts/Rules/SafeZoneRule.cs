@@ -17,8 +17,9 @@ namespace RuralGames.Rules
 
         public bool CanEvaluate(RuleContext context)
         {
-            // Only evaluate when token is moving ON the board (not leaving base)
+            // Only check moves on the main board (not Base, not Home)
             return context.CurrentState == TokenState.OnBoard
+                && context.TargetBoardIndex >= 0
                 && context.TargetBoardIndex < 52;
         }
 
@@ -27,9 +28,8 @@ namespace RuralGames.Rules
             if (_board.IsSafeZone(context.TargetBoardIndex))
             {
                 Debug.Log($"[SafeZoneRule] Index {context.TargetBoardIndex} is a SAFE ZONE.");
-                return true; // Safe zones are always valid to land on
             }
-            return true; // Not a safe zone, allow other rules to handle it
+            return true; // Safe zones are always valid to land on
         }
     }
 }
