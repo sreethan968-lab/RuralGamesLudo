@@ -27,9 +27,6 @@ namespace RuralGames.Token
             _board = Object.FindAnyObjectByType<BoardManager>();
             _rules = Object.FindAnyObjectByType<RuleManager>();
 
-            if (_board == null) Debug.LogError("[Token] BoardManager not found!");
-            if (_rules == null) Debug.LogError("[Token] RuleManager not found!");
-
             SpriteRenderer sr = GetComponent<SpriteRenderer>();
             if (sr == null)
             {
@@ -37,8 +34,6 @@ namespace RuralGames.Token
                 sr.sprite = CreateCircleSprite();
             }
             sr.color = playerColor;
-
-            Debug.Log($"[Token] Awake complete. Position: {transform.position}");
         }
 
         private void Update()
@@ -50,34 +45,33 @@ namespace RuralGames.Token
                 {
                     transform.position = _targetPosition;
                     _isMoving = false;
-                    Debug.Log($"[Token] Arrived at position: {transform.position}, Index: {currentBoardIndex}");
+                    Debug.Log($"[Token] Player {playerId} arrived at index {currentBoardIndex}");
                 }
             }
         }
 
-        public bool TryMove(int diceValue)
+        /// <summary>
+        /// Checks if this token CAN move, without actually moving it.
+        /// </summary>
+        public bool CanMove(int diceValue)
         {
-            if (_board == null || _rules == null)
-            {
-                Debug.LogError("[Token] Board or Rules missing!");
-                return false;
-            }
+            if (_board == null || _rules == null) return false;
 
             int targetIndex = _board.CalculateTargetIndex(playerId, currentBoardIndex, diceValue, currentState);
-            Debug.Log($"[Token] TryMove: state={currentState}, dice={diceValue}, targetIndex={targetIndex}");
-
-            if (targetIndex == -1)
-            {
-                Debug.Log("[Token] Target invalid (-1).");
-                return false;
-            }
+            if (targetIndex == -1) return false;
 
             var context = new RuleContext(playerId, 0, diceValue, currentState, currentBoardIndex, targetIndex);
-            bool valid = _rules.IsMoveValid(context);
-            Debug.Log($"[Token] IsMoveValid returned: {valid}");
+            return _rules.IsMoveValid(context);
+        }
 
-            if (!valid) return false;
+        /// <summary>
+        /// Validates AND executes the move.
+        /// </summary>
+        public bool TryMove(int diceValue)
+        {
+            if (!CanMove(diceValue)) return false;
 
+            int targetIndex = _board.CalculateTargetIndex(playerId, currentBoardIndex, diceValue, currentState);
             ExecuteMove(targetIndex, diceValue);
             return true;
         }
@@ -104,16 +98,18 @@ namespace RuralGames.Token
             _targetPosition.z = 0;
             _isMoving = true;
 
-            Debug.Log($"[Token] Moving to index {currentBoardIndex}, target pos: {_targetPosition}");
+            Debug.Log($"[Token] Player {playerId} moving to index {currentBoardIndex}");
         }
 
         public void SetState(TokenState state, int boardIndex)
         {
             currentState = state;
             currentBoardIndex = boardIndex;
-            Vector3 pos = _board != null ? _board.GetPosition(playerId, boardIndex, state) : Vector3.zero;
-            transform.position = new Vector3(pos.x, pos.y, 0);
-            Debug.Log($"[Token] SetState: {state}, index {boardIndex}, pos: {transform.position}");
+            if (_board != null)
+            {
+                transform.position = _board.GetPosition(playerId, boardIndex, state);
+                transform.position = new Vector3(transform.position.x, transform.position.y, 0);
+            }
         }
 
         private Sprite CreateCircleSprite()

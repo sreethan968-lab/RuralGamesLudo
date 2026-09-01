@@ -1,18 +1,18 @@
 using UnityEngine;
 using RuralGames.Dice;
 using RuralGames.Token;
-using RuralGames.Rules;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace RuralGames.Core
 {
     public enum GamePhase
     {
-        Idle,           // Waiting for player to roll
-        Rolling,        // Dice is rolling
-        SelectingToken, // Player must pick which token to move
-        Moving,         // Token is moving on board
-        EndTurn         // Turn is over, switch player
+        Idle,
+        Rolling,
+        SelectingToken,
+        Moving,
+        EndTurn
     }
 
     public class GameManager : MonoBehaviour
@@ -23,11 +23,13 @@ namespace RuralGames.Core
 
         [Header("References")]
         [SerializeField] private DiceRoller diceRoller;
-        [SerializeField] private List<TokenController> playerTokens; // All tokens for current player
+        [SerializeField] private List<TokenController> playerTokens;
 
         [Header("State")]
         [SerializeField] private GamePhase currentPhase = GamePhase.Idle;
         [SerializeField] private int lastDiceRoll = 0;
+
+        private List<TokenController> _validTokens = new();
 
         private void Start()
         {
@@ -42,53 +44,69 @@ namespace RuralGames.Core
 
         private void Update()
         {
-            // Only allow rolling in Idle phase
+            // Roll dice
             if (currentPhase == GamePhase.Idle && Input.GetKeyDown(KeyCode.Space))
             {
                 currentPhase = GamePhase.Rolling;
                 diceRoller.Roll();
+            }
+
+            // Select token (press 1-4)
+            if (currentPhase == GamePhase.SelectingToken)
+            {
+                for (int i = 1; i <= _validTokens.Count && i <= 4; i++)
+                {
+                    if (Input.GetKeyDown(KeyCode.Alpha0 + i))
+                    {
+                        MoveSelectedToken(i - 1);
+                        break;
+                    }
+                }
             }
         }
 
         private void HandleDiceResult(int roll)
         {
             lastDiceRoll = roll;
+
+            // Find which tokens can legally move
+            _validTokens = playerTokens.Where(t => t.CanMove(roll)).ToList();
+
+            if (_validTokens.Count == 0)
+            {
+                Debug.Log($"<color=red>[GameManager] No valid moves for Player {currentPlayerId} with roll {roll}</color>");
+                EndTurn();
+                return;
+            }
+
             currentPhase = GamePhase.SelectingToken;
 
-            Debug.Log($"[GameManager] Player {currentPlayerId} rolled {roll}");
-
-            // For now: auto-move the first valid token (we'll add manual selection later)
-            bool anyMoved = TryMoveFirstValidToken();
-
-            if (anyMoved)
+            Debug.Log($"[GameManager] Player {currentPlayerId} rolled {roll}. Select a token to move:");
+            for (int i = 0; i < _validTokens.Count; i++)
             {
-                currentPhase = GamePhase.Moving;
-                Invoke(nameof(EndTurn), 1.5f); // Wait for move to finish
-            }
-            else
-            {
-                Debug.Log($"<color=red>[GameManager] No valid moves for Player {currentPlayerId}</color>");
-                EndTurn();
+                int tokenNum = playerTokens.IndexOf(_validTokens[i]);
+                Debug.Log($"  Press {i + 1} for Token_{tokenNum}");
             }
         }
 
-        private bool TryMoveFirstValidToken()
+        private void MoveSelectedToken(int validListIndex)
         {
-            foreach (var token in playerTokens)
-            {
-                // TryMove returns true only if RuleManager allows it
-                if (token.TryMove(lastDiceRoll))
-                {
-                    Debug.Log($"[GameManager] Moving token for Player {currentPlayerId}");
-                    return true;
-                }
-            }
-            return false;
+            if (validListIndex < 0 || validListIndex >= _validTokens.Count) return;
+
+            var token = _validTokens[validListIndex];
+            currentPhase = GamePhase.Moving;
+
+            Debug.Log($"[GameManager] Moving Token...");
+            token.TryMove(lastDiceRoll);
+
+            Invoke(nameof(EndTurn), 1.5f);
         }
 
         private void EndTurn()
         {
             currentPhase = GamePhase.EndTurn;
+            _validTokens.Clear();
+
             currentPlayerId = (currentPlayerId + 1) % totalPlayers;
             currentPhase = GamePhase.Idle;
 
